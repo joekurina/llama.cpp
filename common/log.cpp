@@ -11,6 +11,7 @@
 #include <sstream>
 #include <thread>
 #include <vector>
+#include <algorithm>
 
 #if defined(_WIN32)
 #    include <io.h>

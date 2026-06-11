@@ -67,7 +67,7 @@ static const char* g_col[] = {
 };
 
 struct common_log_entry {
-    enum ggml_log_level level;
+    enum ggml_log_level level {GGML_LOG_LEVEL_INFO};
 
     std::vector<char> msg;
 

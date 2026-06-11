@@ -69,14 +69,11 @@ static const char* g_col[] = {
 struct common_log_entry {
     enum ggml_log_level level;
 
-    bool prefix;
-
-    int64_t timestamp;
-
     std::vector<char> msg;
 
-    // signals the worker thread to stop
-    bool is_end;
+    int64_t timestamp { 0 };
+    bool is_end       { false }; // signals the worker thread to stop
+    bool prefix       { false };
 
     common_log_entry(size_t size = 256) : msg(size) { }
 

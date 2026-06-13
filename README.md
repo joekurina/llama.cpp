@@ -1,5 +1,38 @@
 # llama.cpp
 
+## V620 fork
+
+This is Joe's private llama.cpp fork for AMD Radeon Pro V620 / RDNA2 work. The immediate target is a 2x Radeon Pro V620 system running `unsloth/Qwen3.6-27B-MTP-GGUF:Q8_0` at the model's native `262144` context length.
+
+Primary baseline:
+
+- Q8_0 model weights
+- `q8_0` K/V cache
+- `--split-mode layer`
+- FlashAttention enabled
+- `-np 1`
+
+Goals:
+
+- Keep the fork close to upstream llama.cpp while making targeted V620/RDNA2 changes.
+- Establish and measure the native-262k layer-split baseline first.
+- Separate prompt-processing/prefill work from decode-focused work.
+- Evaluate upstream tensor parallelism with non-quantized KV cache controls before changing quantized-KV behavior.
+- Prototype symmetric `q8_0` K/V tensor parallelism only after the baseline and controls are stable.
+- Tune RDNA2 hot paths from measured bottlenecks, not from speculative rewrites.
+
+Progress checklist:
+
+- [x] Create the `V620` branch.
+- [x] Add this fork overview, goals, and checklist.
+- [ ] Confirm the V620 ROCm/HIP build configuration.
+- [ ] Run the layer-split `q8_0` KV baseline at `262144` context.
+- [ ] Capture prompt eval, decode, TTFT, and VRAM metrics for the baseline.
+- [ ] Evaluate upstream tensor mode with F16/BF16 KV controls.
+- [ ] Prototype symmetric `q8_0` K/V tensor mode in the private fork.
+- [ ] Validate tensor-mode correctness against single-GPU and layer-split controls.
+- [ ] Tune RDNA2 kernels based on measured prefill and decode bottlenecks.
+
 ![llama](https://raw.githubusercontent.com/ggml-org/llama.brand/refs/heads/master/cover/llama-cpp/cover-llama-cpp-dark.svg)
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)

@@ -154,6 +154,60 @@ static __global__ void rms_norm_f32(const float * x,
     }
 }
 
+static __global__ void rms_norm_f32_wave32(const float * x,
+                                          float *       dst,
+                                          const int     ncols,
+                                          const int64_t stride_row,
+                                          const int64_t stride_channel,
+                                          const int64_t stride_sample,
+                                          const float   eps) {
+    ggml_cuda_pdl_lc();
+    const int nrows     = gridDim.x;
+    const int nchannels = gridDim.y;
+
+    const int row       = blockIdx.x;
+    const int channel   = blockIdx.y;
+    const int sample    = blockIdx.z;
+    const int tid       = threadIdx.x;
+
+    x   += sample*stride_sample + channel*stride_channel + row*stride_row;
+    dst += ((sample*nchannels + channel)*nrows + row)*ncols;
+
+    float sum = 0.0f;
+
+    ggml_cuda_pdl_sync();
+    for (int col = tid; col < ncols; col += 128) {
+        const float xi = x[col];
+        sum += xi * xi;
+    }
+
+    sum = warp_reduce_sum<32>(sum);
+
+    __shared__ float warp_sums[4];
+    __shared__ float scale;
+
+    const int warp_id = tid >> 5;
+    const int lane_id = tid & 31;
+
+    if (lane_id == 0) {
+        warp_sums[warp_id] = sum;
+    }
+    __syncthreads();
+
+    if (warp_id == 0) {
+        sum = lane_id < 4 ? warp_sums[lane_id] : 0.0f;
+        sum = warp_reduce_sum<32>(sum);
+        if (lane_id == 0) {
+            scale = rsqrtf(sum / ncols + eps);
+        }
+    }
+    __syncthreads();
+
+    for (int col = tid; col < ncols; col += 128) {
+        dst[col] = scale * x[col];
+    }
+}
+
 template <int block_size>
 static __global__ void rms_norm_back_f32(
         const float * grad, const float * xf, float * dst, const int ncols, const float eps) {
@@ -305,7 +359,12 @@ static void rms_norm_f32_cuda(
         const float * x, float * dst, const int ncols, const int nrows, const int nchannels, const int nsamples,
         const int64_t stride_row, const int64_t stride_channel, const int64_t stride_sample, const float eps, cudaStream_t stream) {
     const dim3 blocks_num(nrows, nchannels, nsamples);
-    if (ncols < 1024) {
+    const int cc = ggml_cuda_info().devices[ggml_cuda_get_device()].cc;
+    if (GGML_CUDA_CC_IS_RDNA2(cc)) {
+        const dim3 block_dims(128, 1, 1);
+        const ggml_cuda_kernel_launch_params launch_params = {blocks_num, block_dims, 0, stream};
+        ggml_cuda_kernel_launch(rms_norm_f32_wave32, launch_params, x, dst, ncols, stride_row, stride_channel, stride_sample, eps);
+    } else if (ncols < 1024) {
         const dim3 block_dims(256, 1, 1);
         const ggml_cuda_kernel_launch_params launch_params = {blocks_num, block_dims, block_dims.x > WARP_SIZE ? 32 * sizeof(float): 0, stream};
         ggml_cuda_kernel_launch(rms_norm_f32<256, false>, launch_params,
